@@ -10,6 +10,7 @@ spec:
   database:
     enableLocalDb: true
   application:
+    dynamicPluginsConfigMapName: dynamic-plugins-rhdh
     appConfig:
       configMaps:
         - name: app-config-rhdh
