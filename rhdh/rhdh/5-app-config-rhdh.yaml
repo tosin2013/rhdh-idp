@@ -76,3 +76,12 @@ data:
     scaffolder:
       github:
         token: ${GITHUB_TOKEN}                    
+
+    argocd:
+      appLocatorMethods:
+        - type: config
+          instances:
+            - name: default
+              url: https://openshift-gitops-server-openshift-gitops.apps.cluster-<GUID>.dynamic.redhatworkshops.io
+              username: <argocd-username>
+              password: <argocd-password>
