@@ -33,34 +33,34 @@ print_warning() {
 update_file() {
   local file_path="$1"
   local file_description="$2"
-  
+
   print_status "Processing $file_description..."
-  
+
   # Check if file exists
   if [[ ! -f "$file_path" ]]; then
     print_error "File $file_path does not exist. Skipping."
     return 1
   fi
-  
+
   # Check if there are any template placeholders to replace
   if ! grep -q "cluster-<GUID>\.dynamic\.redhatworkshops\.io" "$file_path"; then
     print_warning "No template placeholders found in $file_path. The file may have already been updated. Skipping."
     return 0
   fi
-  
+
   # Backup the original file
   cp "$file_path" "$file_path.backup.$(date +%Y%m%d%H%M%S)"
   print_status "Backup created: $file_path.backup.$(date +%Y%m%d%H%M%S)"
-  
+
   # Perform the replacement using the cluster suffix (without 'apps.' prefix)
   sed -i "s/cluster-<GUID>\.dynamic\.redhatworkshops\.io/$CLUSTER_SUFFIX/g" "$file_path"
-  
+
   # Verify the replacement was successful
   if grep -q "cluster-<GUID>\.dynamic\.redhatworkshops\.io" "$file_path"; then
     print_error "Failed to replace all template placeholders in $file_path."
     return 1
   fi
-  
+
   print_status "Successfully updated $file_description"
   return 0
 }

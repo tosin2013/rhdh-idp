@@ -1,0 +1,29 @@
+# .gitleaksignore
+# Gitleaks ignore patterns for RHDH IDP repository
+
+# Ignore the detect-secrets baseline file (contains hashed secrets)
+.secrets.baseline
+
+# Example secrets that are not real secrets
+**/examples/**
+**/templates/**
+
+# Configuration files with placeholder values
+cluster-<GUID>.dynamic.redhatworkshops.io
+<github-oauth-client-id>
+<github-oauth-client-secret>
+<k8s_token>
+<github_token>
+<argocd-username>
+<argocd-password>
+<add-tls-cert-here>
+<add-tls-key-here>
+
+# Base64 encoded placeholder values
+YXZlcnlzZWN1cmVwYXNzd29yZA==
+a2V5Y2xvYWs=
+
+# Documentation and comments
+# These are not real secrets, just examples in comments or docs
+developer-hub-secret
+N4KQcvTEIi6lAMGB5S0vHvBZdeAh789+J

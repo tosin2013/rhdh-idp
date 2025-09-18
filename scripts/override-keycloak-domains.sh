@@ -7,8 +7,8 @@ set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KEYCLOAK_INSTANCE_FILE="$SCRIPT_DIR/../keycloak/base/5-keycloak-instance.yaml"
-KEYCLOAK_REALM_FILE="$SCRIPT_DIR/../keycloak/base/6-keycloak-realm.yaml"
+KEYCLOAK_INSTANCE_FILE="$SCRIPT_DIR/../keycloak/keycloak/5-keycloak-instance.yaml"
+KEYCLOAK_REALM_FILE="$SCRIPT_DIR/../keycloak/keycloak/6-keycloak-realm.yaml"
 
 # Default values
 DEFAULT_KEYCLOAK_DOMAIN="keycloak-rhdh-operator.apps.cluster-demo.dynamic.redhatworkshops.io"
@@ -68,61 +68,61 @@ show_usage() {
 # Function to check if required files exist
 check_files() {
     local files_exist=true
-    
+
     if [[ ! -f "$KEYCLOAK_INSTANCE_FILE" ]]; then
         print_error "Keycloak instance file not found: $KEYCLOAK_INSTANCE_FILE"
         files_exist=false
     fi
-    
+
     if [[ ! -f "$KEYCLOAK_REALM_FILE" ]]; then
         print_error "Keycloak realm file not found: $KEYCLOAK_REALM_FILE"
         files_exist=false
     fi
-    
+
     if [[ "$files_exist" == "false" ]]; then
         exit 1
     fi
-    
+
     print_status "Found required configuration files"
 }
 
 # Function to auto-detect domains from OpenShift
 auto_detect_domains() {
     print_status "Auto-detecting domains from OpenShift cluster..."
-    
+
     # Check if oc is available
     if ! command -v oc &> /dev/null; then
         print_error "oc CLI is not available. Cannot auto-detect domains."
         return 1
     fi
-    
+
     if ! oc whoami &> /dev/null; then
         print_error "Not logged into OpenShift. Please run 'oc login' first."
         return 1
     fi
-    
+
     # Get cluster domain from routes or ingress
     local cluster_domain
     cluster_domain=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}' 2>/dev/null)
-    
+
     if [[ -z "$cluster_domain" ]]; then
         # Fallback: try to get from existing routes
         cluster_domain=$(oc get routes -A -o jsonpath='{.items[0].spec.host}' 2>/dev/null | sed 's/^[^.]*\.//')
     fi
-    
+
     if [[ -z "$cluster_domain" ]]; then
         print_error "Could not auto-detect cluster domain. Please specify domains manually."
         return 1
     fi
-    
+
     NEW_KEYCLOAK_DOMAIN="keycloak-rhdh-operator.$cluster_domain"
     NEW_RHDH_DOMAIN="rhdh.$cluster_domain"
-    
+
     print_status "Auto-detected domains:"
     print_info "  Cluster domain: $cluster_domain"
     print_info "  Keycloak domain: $NEW_KEYCLOAK_DOMAIN"
     print_info "  RHDH domain: $NEW_RHDH_DOMAIN"
-    
+
     return 0
 }
 
@@ -130,10 +130,10 @@ auto_detect_domains() {
 create_backups() {
     if [[ "$CREATE_BACKUP" == "true" ]]; then
         local timestamp=$(date +%Y%m%d_%H%M%S)
-        
+
         cp "$KEYCLOAK_INSTANCE_FILE" "$KEYCLOAK_INSTANCE_FILE.backup_$timestamp"
         cp "$KEYCLOAK_REALM_FILE" "$KEYCLOAK_REALM_FILE.backup_$timestamp"
-        
+
         print_status "Created backup files:"
         print_info "  $KEYCLOAK_INSTANCE_FILE.backup_$timestamp"
         print_info "  $KEYCLOAK_REALM_FILE.backup_$timestamp"
@@ -144,12 +144,12 @@ create_backups() {
 show_changes() {
     print_status "Changes that would be made:"
     echo
-    
+
     print_info "In $KEYCLOAK_INSTANCE_FILE:"
     echo "  adminUrl: 'https://$DEFAULT_KEYCLOAK_DOMAIN' → 'https://$NEW_KEYCLOAK_DOMAIN'"
     echo "  hostname: $DEFAULT_KEYCLOAK_DOMAIN → $NEW_KEYCLOAK_DOMAIN"
     echo
-    
+
     print_info "In $KEYCLOAK_REALM_FILE:"
     echo "  redirectUris: https://$DEFAULT_RHDH_DOMAIN/api/auth/* → https://$NEW_RHDH_DOMAIN/api/auth/*"
     echo "  rootUrl: https://$DEFAULT_RHDH_DOMAIN → https://$NEW_RHDH_DOMAIN"
@@ -160,24 +160,24 @@ show_changes() {
 # Function to apply domain changes
 apply_changes() {
     print_status "Applying domain changes..."
-    
+
     # Update Keycloak instance file
     print_info "Updating $KEYCLOAK_INSTANCE_FILE"
-    
+
     # Update adminUrl
     sed -i "s|adminUrl: 'https://$DEFAULT_KEYCLOAK_DOMAIN'|adminUrl: 'https://$NEW_KEYCLOAK_DOMAIN'|g" "$KEYCLOAK_INSTANCE_FILE"
-    
+
     # Update hostname
     sed -i "s|hostname: $DEFAULT_KEYCLOAK_DOMAIN|hostname: $NEW_KEYCLOAK_DOMAIN|g" "$KEYCLOAK_INSTANCE_FILE"
-    
+
     # Update Keycloak realm file
     print_info "Updating $KEYCLOAK_REALM_FILE"
-    
+
     # Update all RHDH domain references
     sed -i "s|https://$DEFAULT_RHDH_DOMAIN|https://$NEW_RHDH_DOMAIN|g" "$KEYCLOAK_REALM_FILE"
-    
+
     print_status "Domain override completed successfully!"
-    
+
     if [[ "$VERBOSE" == "true" ]]; then
         echo
         print_info "Updated domains:"
@@ -190,17 +190,17 @@ apply_changes() {
 validate_domain() {
     local domain=$1
     local domain_name=$2
-    
+
     if [[ ! "$domain" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]]; then
         print_error "Invalid $domain_name domain format: $domain"
         return 1
     fi
-    
+
     if [[ ${#domain} -gt 253 ]]; then
         print_error "$domain_name domain too long (max 253 characters): $domain"
         return 1
     fi
-    
+
     return 0
 }
 

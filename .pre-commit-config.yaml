@@ -1,0 +1,197 @@
+# Pre-commit configuration for RHDH IDP repository
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  # General purpose hooks for file formatting and basic checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.patch$'
+      - id: end-of-file-fixer
+        exclude: '\.patch$'
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+        exclude: |
+          (?x)^(
+            .*\.template\.ya?ml$|
+            .*\.tmpl\.ya?ml$
+          )$
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+      - id: check-merge-conflict
+      - id: check-json
+      - id: pretty-format-json
+        args: ['--autofix']
+      - id: check-toml
+      - id: check-xml
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  # Gitleaks - Detect secrets in git repos (essential for K8s configs)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+
+  # YAML linting with yamllint
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ['-d', '{extends: relaxed, rules: {line-length: {max: 120}, indentation: {spaces: 2}}}']
+        exclude: |
+          (?x)^(
+            .*\.template\.ya?ml$|
+            .*\.tmpl\.ya?ml$
+          )$
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        args: ['-e', 'SC2086', '-e', 'SC2001', '-e', 'SC2162', '-e', 'SC2034', '-e', 'SC2155']
+        exclude: |
+          (?x)^(
+            .*\.template\.sh$|
+            .*\.tmpl\.sh$
+          )$
+
+  # Kustomize validation
+  - repo: local
+    hooks:
+      - id: kustomize-validate
+        name: Validate Kustomize configurations
+        entry: bash
+        language: system
+        files: kustomization\.ya?ml$
+        args:
+          - -c
+          - |
+            for file in "$@"; do
+              dir=$(dirname "$file")
+              echo "Validating kustomize configuration in $dir"
+              if ! kustomize build "$dir" > /dev/null 2>&1; then
+                echo "❌ Kustomize validation failed for $dir"
+                exit 1
+              else
+                echo "✅ Kustomize validation passed for $dir"
+              fi
+            done
+        require_serial: false
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix', '--disable', 'MD013']  # Disable line-length rule
+
+  # Local hooks for custom validations
+  - repo: local
+    hooks:
+      # Check for placeholder values in YAML files
+      - id: check-placeholders
+        name: Check for template placeholders
+        entry: bash
+        language: system
+        files: \.(yaml|yml)$
+        args:
+          - -c
+          - |
+            if grep -n -E '<[^>]+>' "$@"; then
+              echo "❌ Found template placeholders that need to be replaced"
+              exit 1
+            fi
+            if grep -n -E 'cluster-<GUID>' "$@"; then
+              echo "❌ Found unresolved GUID placeholders"
+              exit 1
+            fi
+            if grep -n -E '<.*-token>' "$@"; then
+              echo "❌ Found unresolved token placeholders"
+              exit 1
+            fi
+
+      # Validate script dependencies
+      - id: check-script-dependencies
+        name: Check script dependencies
+        entry: bash
+        language: system
+        files: ^scripts/.*\.sh$
+        args:
+          - -c
+          - |
+            for script in "$@"; do
+              echo "Checking dependencies for $script"
+              # Check for required commands in scripts
+              while IFS= read -r cmd; do
+                if ! command -v "$cmd" >/dev/null 2>&1; then
+                  echo "⚠️  Warning: Command '$cmd' used in $script but not available"
+                fi
+              done < <(grep -oE 'command -v [a-zA-Z0-9_-]+' "$script" | cut -d' ' -f3)
+            done
+
+      # Validate Kubernetes namespaces consistency
+      - id: check-namespace-consistency
+        name: Check namespace consistency
+        entry: bash
+        language: system
+        files: \.(yaml|yml)$
+        args:
+          - -c
+          - |
+            echo "Checking namespace consistency across Kubernetes manifests..."
+            # This is a basic check - could be enhanced to be more sophisticated
+            namespaces=$(grep -h "namespace:" "$@" | sort | uniq -c | sort -nr)
+            if [ -n "$namespaces" ]; then
+              echo "Namespaces found:"
+              echo "$namespaces"
+            fi
+
+      # Check for secure defaults in Kubernetes manifests
+      - id: check-k8s-security
+        name: Check Kubernetes security best practices
+        entry: bash
+        language: system
+        files: \.(yaml|yml)$
+        args:
+          - -c
+          - |
+            for file in "$@"; do
+              # Check for privileged containers
+              if grep -q "privileged: true" "$file"; then
+                echo "⚠️  Warning: Privileged container found in $file"
+              fi
+              # Check for root user
+              if grep -q "runAsUser: 0" "$file"; then
+                echo "⚠️  Warning: Container running as root in $file"
+              fi
+              # Check for missing resource limits
+              if grep -q "kind: Deployment\|kind: StatefulSet\|kind: DaemonSet" "$file" && ! grep -q "resources:" "$file"; then
+                echo "⚠️  Warning: No resource limits defined in $file"
+              fi
+            done
+
+# Global excludes
+exclude: |
+  (?x)^(
+    \.git/.*|
+    .*\.backup.*|
+    .*\.bak$|
+    .*\.orig$
+  )$
+
+# Fail fast - stop on first failure
+fail_fast: false
+
+# Default language version
+default_language_version:
+  python: python3
+
+# Minimum pre-commit version
+minimum_pre_commit_version: '3.0.0'

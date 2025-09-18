@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SECRET_FILE="$SCRIPT_DIR/../keycloak/base/3-secret.yaml"
+SECRET_FILE="$SCRIPT_DIR/../keycloak/keycloak/3-secret.yaml"
 NAMESPACE="openshift-ingress"  # Default namespace for OpenShift router certs
 SECRET_NAME="cert-manager-ingress-cert"  # Default OpenShift ingress certificate secret
 TARGET_NAMESPACE="demo-project"  # Target namespace for the secret
@@ -38,12 +38,12 @@ check_oc_cli() {
         print_error "oc CLI is not available. Please install OpenShift CLI."
         exit 1
     fi
-    
+
     if ! oc whoami &> /dev/null; then
         print_error "Not logged into OpenShift. Please run 'oc login' first."
         exit 1
     fi
-    
+
     print_status "Connected to OpenShift as $(oc whoami)"
 }
 
@@ -51,17 +51,17 @@ check_oc_cli() {
 list_certificates() {
     print_status "Available TLS secrets in common namespaces:"
     echo
-    
+
     # Check openshift-ingress namespace
     echo "=== openshift-ingress namespace ==="
     oc get secrets -n openshift-ingress --field-selector type=kubernetes.io/tls 2>/dev/null || echo "No TLS secrets found or no access"
     echo
-    
+
     # Check openshift-ingress-operator namespace
     echo "=== openshift-ingress-operator namespace ==="
     oc get secrets -n openshift-ingress-operator --field-selector type=kubernetes.io/tls 2>/dev/null || echo "No TLS secrets found or no access"
     echo
-    
+
     # Check current namespace
     CURRENT_NS=$(oc project -q 2>/dev/null || echo "default")
     echo "=== Current namespace ($CURRENT_NS) ==="
@@ -73,24 +73,24 @@ list_certificates() {
 extract_certificate() {
     local source_namespace=$1
     local source_secret=$2
-    
+
     print_status "Extracting certificate from secret '$source_secret' in namespace '$source_namespace'"
-    
+
     # Check if secret exists
     if ! oc get secret "$source_secret" -n "$source_namespace" &> /dev/null; then
         print_error "Secret '$source_secret' not found in namespace '$source_namespace'"
         return 1
     fi
-    
+
     # Extract tls.crt and tls.key
     TLS_CRT=$(oc get secret "$source_secret" -n "$source_namespace" -o jsonpath='{.data.tls\.crt}' 2>/dev/null)
     TLS_KEY=$(oc get secret "$source_secret" -n "$source_namespace" -o jsonpath='{.data.tls\.key}' 2>/dev/null)
-    
+
     if [[ -z "$TLS_CRT" || -z "$TLS_KEY" ]]; then
         print_error "Failed to extract certificate data from secret"
         return 1
     fi
-    
+
     print_status "Successfully extracted certificate data"
     return 0
 }
@@ -98,11 +98,11 @@ extract_certificate() {
 # Function to update the secret file
 update_secret_file() {
     print_status "Updating $SECRET_FILE with extracted certificates"
-    
+
     # Create backup
     cp "$SECRET_FILE" "$SECRET_FILE.backup"
     print_status "Created backup at $SECRET_FILE.backup"
-    
+
     # Create new secret content
     cat > "$SECRET_FILE" << EOF
 ---
@@ -116,7 +116,7 @@ data:
   tls.crt: $TLS_CRT
   tls.key: $TLS_KEY
 EOF
-    
+
     print_status "Successfully updated $SECRET_FILE"
 }
 
